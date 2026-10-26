@@ -1,12 +1,27 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from retell import Retell
 
 load_dotenv()
 
 app = FastAPI(title="Retell Chat API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        # Add the exact HTTPS origin hosting your frontend here.
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
+)
 
 client = Retell()
 AGENT_ID = os.getenv("RETELL_AGENT_KEY")
@@ -125,6 +140,5 @@ def send_message(request: MessageRequest):
     except Exception as e:
         error_message = str(e)
 
-        # Do not silently create a new session and replay the message.
         # The client should explicitly start a new session if needed.
         raise HTTPException(status_code=502, detail=error_message)

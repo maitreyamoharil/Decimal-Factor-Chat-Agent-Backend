@@ -16,9 +16,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:5500",
         "http://127.0.0.1:5500",
-        "https://decimalfactor.co.uk/" # Add the exact HTTPS origin hosting your frontend here.
+        "https://decimalfactor.co.uk"
     ],
-    
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
@@ -38,7 +37,7 @@ class StartChatResponse(BaseModel):
 
 
 class MessageRequest(BaseModel):
-    chat_id: str
+    chat_id: str | None = None
     content: str
 
 
@@ -91,6 +90,51 @@ def extract_messages(response):
     return result
 
 
+def create_new_chat():
+    """Create a new Retell chat session."""
+    agent_id = get_agent_id()
+
+    try:
+        chat_session = client.chat.create(
+            agent_id=agent_id,
+            metadata={"source": "fastapi"},
+            retell_llm_dynamic_variables={
+                "customer_name": "Test User"
+            }
+        )
+
+        return chat_session.chat_id
+
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+def get_active_chat_id(chat_id):
+    """
+    Check whether the supplied Retell chat session is active.
+    If it is not active or cannot be retrieved, create a new session.
+    """
+
+    if not chat_id or not chat_id.strip():
+        return create_new_chat()
+
+    try:
+        chat = client.chat.retrieve(chat_id=chat_id)
+
+        # Check the Retell chat status.
+        status = getattr(chat, "status", None)
+
+        if status == "active":
+            return chat_id
+
+        # Session exists but is no longer active.
+        return create_new_chat()
+
+    except Exception:
+        # Invalid, expired, or unavailable session.
+        return create_new_chat()
+
+
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "Retell Chat API is running"}
@@ -118,7 +162,8 @@ def start_chat(request: StartChatRequest):
 
 @app.post("/chat/message", response_model=MessageResponse)
 def send_message(request: MessageRequest):
-    """Send a message to an existing Retell chat session."""
+    """Continue an active chat or create a new one if inactive."""
+
     get_agent_id()
 
     if not request.content.strip():
@@ -127,19 +172,19 @@ def send_message(request: MessageRequest):
             detail="Message content cannot be empty."
         )
 
+    # Find an active session or create a new one.
+    active_chat_id = get_active_chat_id(request.chat_id)
+
     try:
         response = client.chat.create_chat_completion(
-            chat_id=request.chat_id,
+            chat_id=active_chat_id,
             content=request.content
         )
 
         return {
-            "chat_id": request.chat_id,
+            "chat_id": active_chat_id,
             "messages": extract_messages(response)
         }
 
     except Exception as e:
-        error_message = str(e)
-
-        # The client should explicitly start a new session if needed.
-        raise HTTPException(status_code=502, detail=error_message)
+        raise HTTPException(status_code=502, detail=str(e))

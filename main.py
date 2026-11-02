@@ -108,6 +108,7 @@ def create_new_chat():
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
 
+
 def get_active_chat_id(chat_id):
     if not chat_id or not chat_id.strip():
         return create_new_chat()
@@ -116,27 +117,34 @@ def get_active_chat_id(chat_id):
         chat = client.chat.retrieve(chat_id=chat_id)
 
     except Exception as e:
-        # Do not silently create a new session for every error.
+        # Do not create a new session for retrieval errors.
         raise HTTPException(
             status_code=502,
-            detail=f"Could not verify Retell chat session: {str(e)}"
+            detail=f"Could not retrieve Retell chat: {str(e)}"
         )
 
-    status = getattr(chat, "status", None)
+    chat_status = chat.chat_status
 
     print("Existing Chat ID:", chat_id)
-    print("Retell Chat Status:", status)
+    print("Retell Chat Status:", chat_status)
 
-    if status == "active":
+    if chat_status == "ongoing":
         return chat_id
 
-    if status == "ended":
+    elif chat_status == "ended":
         return create_new_chat()
+
+    elif chat_status == "error":
+        raise HTTPException(
+            status_code=502,
+            detail="The existing Retell chat encountered an error."
+        )
 
     raise HTTPException(
         status_code=502,
-        detail=f"Unexpected Retell chat status: {status}"
+        detail=f"Unknown Retell chat status: {chat_status}"
     )
+
 
 @app.get("/")
 def health_check():

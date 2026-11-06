@@ -199,3 +199,26 @@ def send_message(request: MessageRequest):
 
     except Exception as e:
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/create-web-call")
+def create_web_call():
+    try:
+        web_call_response = client.call.create_web_call(
+            agent_id=os.getenv("RETELL_VOICE_AGENT_KEY")
+        )
+
+        response_data = web_call_response.model_dump()
+
+        # Never print the access token
+        print("Web Call Response Fields:", list(response_data.keys()))
+
+        print("Call ID:", response_data.get("call_id"))
+        print("Transport:", response_data.get("transport"))
+        print("ICE Servers Present:", bool(response_data.get("ice_servers")))
+
+        return response_data
+
+    except Exception as e:
+        print("Retell Error:", repr(e))
+        raise HTTPException(status_code=502, detail=str(e))
